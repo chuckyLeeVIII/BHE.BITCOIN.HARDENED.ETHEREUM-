@@ -1,0 +1,51 @@
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+
+contract ETHBridge is ReentrancyGuard {
+    using SafeERC20 for IERC20;
+
+    address public owner;
+    IERC20 public wbtc;
+    uint256 public constant WBTC_PER_ETH = 10000; // 1 WBTC = 0.0001 ETH
+    mapping(address => uint256) public lockedETH;
+    mapping(address => uint256) public lockedWBTC;
+
+    event Locked(address indexed user, uint256 amount);
+    event Released(address indexed user, uint256 amount);
+
+    constructor(address _wbtc) {
+        owner = msg.sender;
+        wbtc = IERC20(_wbtc);
+    }
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not the owner");
+        _;
+    }
+
+    /// @notice Lock ETH to bridge to Ethereum chain
+    function lockETH() external payable nonReentrant {
+        require(msg.value > 0, "No ETH sent");
+        uint256 wbtcAmount = msg.value * WBTC_PER_ETH;
+        wbtc.safeTransferFrom(msg.sender, address(this), wbtcAmount);
+        lockedETH[msg.sender] += msg.value;
+        lockedWBTC[msg.sender] += wbtcAmount;
+        emit Locked(msg.sender, wbtcAmount);
+    }
+
+    /// @notice Release locked WBTC in case of emergency
+    function releaseWBTC(address user, uint256 amount) external onlyOwner nonReentrant {
+        require(lockedWBTC[user] >= amount, "Insufficient locked WBTC");
+        lockedWBTC[user] -= amount;
+        wbtc.safeTransfer(user, amount);
+        emit Released(user, amount);
+    }
+
+    /// @notice Emergency withdrawal by owner
+    function emergencyWithdraw(uint256 amount) external onlyOwner nonReentrant {
+        payable(owner).transfer(amount);
+    }
+}

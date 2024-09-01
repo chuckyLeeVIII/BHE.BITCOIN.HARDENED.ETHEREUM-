@@ -1,0 +1,63 @@
+pragma solidity ^0.8.0;
+//BRidgingFunction PurityBridge Fetch Aritfact 
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+
+contract ETHBridge is ReentrancyGuard {
+    using SafeERC20 for IERC20;
+
+    address public owner;
+    IERC20 public wbtc;
+    mapping(address => uint256) public lockedETH;
+    mapping(address => uint256) public lockedWBTC;
+
+    event Locked(address indexed user, uint256 amount);
+    event Released(address indexed user, uint256 amount);
+
+    constructor(address _wbtc) {
+        owner = msg.sender;
+        wbtc = IERC20(_wbtc);
+    }
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not the owner");
+        _;
+    }
+
+    /// @notice Lock ETH to bridge to Ethereum chain
+    function lockETH() external payable nonReentrant {
+        require(msg.value > 0, "No ETH sent");
+        uint256 wbtcAmount = _wrapETH(msg.value);
+        lockedWBTC[msg.sender] += wbtcAmount;
+        emit Locked(msg.sender, wbtcAmount);
+    }
+
+    /// @notice Release locked WBTC in case of emergency
+    function releaseWBTC(address user, uint256 amount) external onlyOwner nonReentrant {
+        require(lockedWBTC[user] >= amount, "Insufficient locked WBTC");
+        lockedWBTC[user] -= amount;
+        _unwrapWBTC(amount, user);
+        emit Released(user, amount);
+    }
+
+    /// @notice Emergency withdrawal by owner
+    function emergencyWithdraw(uint256 amount) external onlyOwner nonReentrant {
+        payable(owner).transfer(amount);
+    }
+
+    function _wrapETH(uint256 amount) internal returns (uint256) {
+        // Implement the logic to wrap ETH into WBTC using a DEX or other mechanism
+        // For example, using the Uniswap or other DEX to swap ETH for WBTC
+        // Return the amount of WBTC received
+        // ...
+    }
+
+    function _unwrapWBTC(uint256 amount, address recipient) internal {
+        // Implement the logic to unwrap WBTC into ETH using a DEX or other mechanism
+        // For example, using the Uniswap or other DEX to swap WBTC for ETH
+        wbtc.safeTransferFrom(msg.sender, address(this), amount);
+        // Transfer the unwrapped ETH to the recipient
+        payable(recipient).transfer(amount);
+    }
+}
